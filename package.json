@@ -1,0 +1,22 @@
+{
+  "name": "country-travel-explorer-project",
+  "version": "1.0.0",
+  "description": "WDD330 Final Project",
+  "homepage": "https://github.com/celestialhaven/country-travel-explorer-project#readme",
+  "bugs": {
+    "url": "https://github.com/celestialhaven/country-travel-explorer-project/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/celestialhaven/country-travel-explorer-project.git"
+  },
+  "author": "Jones G. Mabala <jjonzmabz01@gmail.com>",
+  "type": "commonjs",
+  "scripts": {
+    "start": "parcel index.html",
+    "build": "parcel build index.html"
+  },
+  "dependencies": {
+    "parcel": "^2.16.4"
+  }
+}
