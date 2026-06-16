@@ -10,9 +10,11 @@ import { createElement, formatNumber, listValues } from './utils.js';
 import {
     getFavorites,
     getRecentSearches,
+    getUnsplashAccessKey,
     isFavorite,
     removeFavorite,
     saveFavorite,
+    saveUnsplashAccessKey,
     saveRecentSearch,
 } from './storage.js';
 
@@ -58,7 +60,61 @@ function countryCard(country, onSelect, onToggleFavorite) {
     ]);
 }
 
-function detailPanel(country, images, isLoadingImages, onToggleFavorite) {
+function unsplashKeyForm(accessKey, onSave) {
+    const keyInput = createElement('input', {
+        type: 'password',
+        placeholder: 'Unsplash access key',
+        value: accessKey,
+        'aria-label': 'Unsplash access key',
+    });
+
+    return createElement('form', {
+        className: 'api-key-form',
+        onSubmit: event => {
+            event.preventDefault();
+            onSave(keyInput.value);
+        },
+    }, [
+        keyInput,
+        createElement('button', {
+            className: 'api-key-button',
+            type: 'submit',
+            textContent: accessKey ? 'Update' : 'Use API',
+        }),
+    ]);
+}
+
+function imageViewer(image, onClose) {
+    if (!image) return null;
+
+    return createElement('div', {
+        className: 'image-viewer',
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': image.alt,
+        onClick: event => {
+            if (event.target === event.currentTarget) onClose();
+        },
+    }, [
+        createElement('div', { className: 'image-viewer-panel' }, [
+            createElement('button', {
+                className: 'image-viewer-close',
+                type: 'button',
+                title: 'Close image preview',
+                'aria-label': 'Close image preview',
+                textContent: 'x',
+                onClick: onClose,
+            }),
+            createElement('img', { src: image.largeUrl || image.url, alt: image.alt }),
+            createElement('div', { className: 'image-viewer-caption' }, [
+                createElement('strong', { textContent: image.alt }),
+                createElement('span', { textContent: image.credit }),
+            ]),
+        ]),
+    ]);
+}
+
+function detailPanel(country, images, isLoadingImages, onToggleFavorite, onViewImage) {
     if (!country) {
         return createElement('section', { className: 'detail-panel empty-state' }, [
             createElement('h2', { textContent: 'Start exploring' }),
@@ -68,12 +124,21 @@ function detailPanel(country, images, isLoadingImages, onToggleFavorite) {
 
     const gallery = isLoadingImages
         ? createElement('p', { className: 'muted', textContent: 'Loading destination images...' })
-        : createElement('div', { className: 'image-gallery' }, images.map(image => (
+        : images.length
+        ? createElement('div', { className: 'image-gallery' }, images.map(image => (
             createElement('figure', {}, [
-                createElement('img', { src: image.url, alt: image.alt, loading: 'lazy' }),
+                createElement('button', {
+                    className: 'gallery-image-button',
+                    type: 'button',
+                    'aria-label': `View larger image: ${image.alt}`,
+                    onClick: () => onViewImage(image),
+                }, [
+                    createElement('img', { src: image.url, alt: image.alt, loading: 'lazy' }),
+                ]),
                 createElement('figcaption', { textContent: image.credit }),
             ])
-        )));
+        )))
+        : createElement('p', { className: 'muted', textContent: 'Travel images are unavailable right now.' });
 
     return createElement('section', { className: 'detail-panel' }, [
         createElement('div', { className: 'detail-heading' }, [
@@ -263,6 +328,8 @@ function App() {
         currentPage: 1,
         loading: false,
         loadingImages: false,
+        selectedImage: null,
+        unsplashAccessKey: getUnsplashAccessKey(),
         message: 'Loading countries...',
     };
 
@@ -272,6 +339,12 @@ function App() {
         Object.assign(state, updates);
         render();
     }
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && state.selectedImage) {
+            setState({ selectedImage: null });
+        }
+    });
 
     async function loadCountries(loader, loadingMessage) {
         setState({ loading: true, message: loadingMessage });
@@ -297,7 +370,7 @@ function App() {
     }
 
     async function loadImages(country) {
-        setState({ selectedCountry: country, destinationImages: [], loadingImages: true });
+        setState({ selectedCountry: country, destinationImages: [], loadingImages: true, selectedImage: null });
 
         try {
             const images = await getDestinationImages(country.name);
@@ -305,6 +378,16 @@ function App() {
         }
         catch {
             setState({ destinationImages: [], loadingImages: false });
+        }
+    }
+
+    function updateUnsplashAccessKey(accessKey) {
+        saveUnsplashAccessKey(accessKey);
+        const nextAccessKey = getUnsplashAccessKey();
+        setState({ unsplashAccessKey: nextAccessKey });
+
+        if (state.selectedCountry) {
+            loadImages(state.selectedCountry);
         }
     }
 
@@ -334,6 +417,7 @@ function App() {
                     createElement('span', { className: 'brand-mark', textContent: 'CT' }),
                     createElement('span', { textContent: 'Country & Travel Explorer' }),
                 ]),
+                unsplashKeyForm(state.unsplashAccessKey, updateUnsplashAccessKey),
             ]),
             createElement('div', { className: 'hero-content' }, [
                 createElement('h1', { textContent: 'Explore countries, cultures, and travel ideas.' }),
@@ -401,9 +485,7 @@ function App() {
                 countryCard(country, loadImages, toggleFavorite)
             )));
 
-        root.append(
-            header,
-            createElement('main', { className: 'main-layout' }, [
+        const main = createElement('main', { className: 'main-layout' }, [
                 createElement('section', { className: 'results-panel' }, [
                     createElement('div', { className: 'section-heading' }, [
                         createElement('h2', { textContent: 'Country results' }),
@@ -464,14 +546,21 @@ function App() {
                     }),
                 ]),
                 createElement('div', { className: 'detail-column' }, [
-                    detailPanel(state.selectedCountry, state.destinationImages, state.loadingImages, toggleFavorite),
+                    detailPanel(state.selectedCountry, state.destinationImages, state.loadingImages, toggleFavorite, image => {
+                        setState({ selectedImage: image });
+                    }),
                     favoritesPanel(state.favorites, loadImages, countryId => {
                         removeFavorite(countryId);
                         setState({ favorites: getFavorites() });
                     }),
                 ]),
-            ]),
-        );
+            ]);
+
+        root.append(header, main);
+
+        if (state.selectedImage) {
+            root.append(imageViewer(state.selectedImage, () => setState({ selectedImage: null })));
+        }
     }
 
     render();

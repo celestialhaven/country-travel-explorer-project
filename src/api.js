@@ -1,5 +1,19 @@
 const COUNTRIES_DATA_URL = 'https://raw.githubusercontent.com/mledoze/countries/master/countries.json';
 const UNSPLASH_BASE = 'https://api.unsplash.com/search/photos';
+const fallbackImageUrls = [
+    {
+        regular: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&h=620&q=80',
+        large: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=85',
+    },
+    {
+        regular: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=900&h=620&q=80',
+        large: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=85',
+    },
+    {
+        regular: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=900&h=620&q=80',
+        large: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1600&q=85',
+    },
+];
 let countriesCache = null;
 
 function normalizeCountry(country) {
@@ -79,51 +93,58 @@ export function getAllCountries() {
     return getCountriesData();
 }
 
+function getFallbackDestinationImages(countryName) {
+    const subjects = ['travel landscape', 'scenic destination', 'cultural landmark'];
+
+    return fallbackImageUrls.map((image, index) => ({
+        id: `${countryName}-fallback-${index + 1}`,
+        alt: `${countryName} ${subjects[index]}`,
+        url: image.regular,
+        largeUrl: image.large,
+        credit: 'Unsplash fallback image',
+    }));
+}
+
 export async function getDestinationImages(countryName) {
     const accessKey = localStorage.getItem('unsplashAccessKey');
 
     if (!accessKey) {
-        return [
-            {
-                id: `${countryName}-landscape`,
-                alt: `${countryName} travel landscape`,
-                url: `https://source.unsplash.com/900x620/?${encodeURIComponent(`${countryName} travel landscape`)}`,
-                credit: 'Unsplash Source',
-            },
-            {
-                id: `${countryName}-city`,
-                alt: `${countryName} city destination`,
-                url: `https://source.unsplash.com/900x620/?${encodeURIComponent(`${countryName} city`)}`,
-                credit: 'Unsplash Source',
-            },
-            {
-                id: `${countryName}-culture`,
-                alt: `${countryName} culture`,
-                url: `https://source.unsplash.com/900x620/?${encodeURIComponent(`${countryName} culture`)}`,
-                credit: 'Unsplash Source',
-            },
-        ];
+        return getFallbackDestinationImages(countryName);
     }
 
     const params = new URLSearchParams({
-        query: `${countryName} travel`,
+        query: `${countryName} travel landmarks nature city`,
         per_page: '6',
         orientation: 'landscape',
+        order_by: 'relevant',
+        content_filter: 'high',
         client_id: accessKey,
     });
 
-    const response = await fetch(`${UNSPLASH_BASE}?${params.toString()}`);
+    try {
+        const response = await fetch(`${UNSPLASH_BASE}?${params.toString()}`);
 
-    if (!response.ok) {
-        throw new Error('Destination images could not be loaded.');
+        if (!response.ok) {
+            throw new Error('Destination images could not be loaded.');
+        }
+
+        const data = await response.json();
+        const photos = data.results || [];
+
+        if (!photos.length) {
+            return getFallbackDestinationImages(countryName);
+        }
+
+        return photos.map(photo => ({
+            id: photo.id,
+            alt: photo.alt_description || photo.description || `${countryName} travel destination`,
+            url: photo.urls.regular,
+            largeUrl: photo.urls.full || photo.urls.regular,
+            credit: photo.user.name,
+            sourceUrl: photo.links.html,
+        }));
     }
-
-    const data = await response.json();
-
-    return data.results.map(photo => ({
-        id: photo.id,
-        alt: photo.alt_description || `${countryName} travel destination`,
-        url: photo.urls.regular,
-        credit: photo.user.name,
-    }));
+    catch {
+        return getFallbackDestinationImages(countryName);
+    }
 }

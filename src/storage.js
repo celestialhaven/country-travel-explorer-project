@@ -1,5 +1,6 @@
 const FAVORITES_KEY = 'countryTravelExplorer:favorites';
 const RECENTS_KEY = 'countryTravelExplorer:recentSearches';
+const UNSPLASH_ACCESS_KEY = 'unsplashAccessKey';
 
 function read(key, fallback) {
     try {
@@ -44,4 +45,19 @@ export function saveRecentSearch(query) {
 
     const recents = getRecentSearches().filter(item => item.toLowerCase() !== normalized.toLowerCase());
     write(RECENTS_KEY, [normalized, ...recents].slice(0, 6));
+}
+
+export function getUnsplashAccessKey() {
+    return localStorage.getItem(UNSPLASH_ACCESS_KEY) || '';
+}
+
+export function saveUnsplashAccessKey(accessKey) {
+    const normalized = accessKey.trim();
+
+    if (normalized) {
+        localStorage.setItem(UNSPLASH_ACCESS_KEY, normalized);
+    }
+    else {
+        localStorage.removeItem(UNSPLASH_ACCESS_KEY);
+    }
 }
