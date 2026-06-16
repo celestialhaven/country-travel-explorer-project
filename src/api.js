@@ -93,6 +93,15 @@ export function getAllCountries() {
     return getCountriesData();
 }
 
+function getCountryName(country) {
+    return typeof country === 'string' ? country : country.name;
+}
+
+function getImageQuery(country) {
+    const countryName = getCountryName(country);
+    return `${countryName} travel`;
+}
+
 function getFallbackDestinationImages(countryName) {
     const subjects = ['travel landscape', 'scenic destination', 'cultural landmark'];
 
@@ -102,49 +111,76 @@ function getFallbackDestinationImages(countryName) {
         url: image.regular,
         largeUrl: image.large,
         credit: 'Unsplash fallback image',
+        source: 'fallback',
     }));
 }
 
-export async function getDestinationImages(countryName) {
-    const accessKey = localStorage.getItem('unsplashAccessKey');
+export async function getDestinationImages(country, accessKey = '') {
+    const countryName = getCountryName(country);
+    const normalizedAccessKey = accessKey.trim();
 
-    if (!accessKey) {
-        return getFallbackDestinationImages(countryName);
+    if (!normalizedAccessKey) {
+        return {
+            images: getFallbackDestinationImages(countryName),
+            source: 'fallback',
+            message: 'Add a valid Unsplash access key to load country-specific photos.',
+        };
     }
 
+    return getUnsplashDestinationImages(country, normalizedAccessKey);
+}
+
+async function getUnsplashDestinationImages(country, accessKey) {
+    const countryName = getCountryName(country);
+
     const params = new URLSearchParams({
-        query: `${countryName} travel landmarks nature city`,
+        query: getImageQuery(country),
         per_page: '6',
         orientation: 'landscape',
         order_by: 'relevant',
         content_filter: 'high',
-        client_id: accessKey,
     });
 
-    try {
-        const response = await fetch(`${UNSPLASH_BASE}?${params.toString()}`);
+    const response = await fetch(`${UNSPLASH_BASE}?${params.toString()}`, {
+        headers: {
+            Authorization: `Client-ID ${accessKey}`,
+        },
+    });
 
-        if (!response.ok) {
-            throw new Error('Destination images could not be loaded.');
-        }
+    if (!response.ok) {
+        const errorMessage = response.status === 401
+            ? 'Your Unsplash access key was rejected. Check the key and try again.'
+            : 'Unsplash country photos could not be loaded right now.';
 
-        const data = await response.json();
-        const photos = data.results || [];
+        return {
+            images: getFallbackDestinationImages(countryName),
+            source: 'fallback',
+            message: errorMessage,
+        };
+    }
 
-        if (!photos.length) {
-            return getFallbackDestinationImages(countryName);
-        }
+    const data = await response.json();
+    const photos = data.results || [];
 
-        return photos.map(photo => ({
+    if (!photos.length) {
+        return {
+            images: getFallbackDestinationImages(countryName),
+            source: 'fallback',
+            message: `Unsplash did not return photos for ${countryName}.`,
+        };
+    }
+
+    return {
+        images: photos.map(photo => ({
             id: photo.id,
             alt: photo.alt_description || photo.description || `${countryName} travel destination`,
             url: photo.urls.regular,
             largeUrl: photo.urls.full || photo.urls.regular,
             credit: photo.user.name,
             sourceUrl: photo.links.html,
-        }));
-    }
-    catch {
-        return getFallbackDestinationImages(countryName);
-    }
+            source: 'unsplash',
+        })),
+        source: 'unsplash',
+        message: `${countryName} photos loaded from Unsplash.`,
+    };
 }

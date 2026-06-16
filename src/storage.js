@@ -1,6 +1,7 @@
 const FAVORITES_KEY = 'countryTravelExplorer:favorites';
 const RECENTS_KEY = 'countryTravelExplorer:recentSearches';
 const UNSPLASH_ACCESS_KEY = 'unsplashAccessKey';
+const ENV_UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY || '';
 
 function read(key, fallback) {
     try {
@@ -48,7 +49,7 @@ export function saveRecentSearch(query) {
 }
 
 export function getUnsplashAccessKey() {
-    return localStorage.getItem(UNSPLASH_ACCESS_KEY) || '';
+    return ENV_UNSPLASH_ACCESS_KEY || localStorage.getItem(UNSPLASH_ACCESS_KEY) || '';
 }
 
 export function saveUnsplashAccessKey(accessKey) {

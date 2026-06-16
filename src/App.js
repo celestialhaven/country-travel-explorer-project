@@ -14,7 +14,6 @@ import {
     isFavorite,
     removeFavorite,
     saveFavorite,
-    saveUnsplashAccessKey,
     saveRecentSearch,
 } from './storage.js';
 
@@ -60,30 +59,6 @@ function countryCard(country, onSelect, onToggleFavorite) {
     ]);
 }
 
-function unsplashKeyForm(accessKey, onSave) {
-    const keyInput = createElement('input', {
-        type: 'password',
-        placeholder: 'Unsplash access key',
-        value: accessKey,
-        'aria-label': 'Unsplash access key',
-    });
-
-    return createElement('form', {
-        className: 'api-key-form',
-        onSubmit: event => {
-            event.preventDefault();
-            onSave(keyInput.value);
-        },
-    }, [
-        keyInput,
-        createElement('button', {
-            className: 'api-key-button',
-            type: 'submit',
-            textContent: accessKey ? 'Update' : 'Use API',
-        }),
-    ]);
-}
-
 function imageViewer(image, onClose) {
     if (!image) return null;
 
@@ -114,7 +89,7 @@ function imageViewer(image, onClose) {
     ]);
 }
 
-function detailPanel(country, images, isLoadingImages, onToggleFavorite, onViewImage) {
+function detailPanel(country, images, imageMessage, imageSource, isLoadingImages, onToggleFavorite, onViewImage) {
     if (!country) {
         return createElement('section', { className: 'detail-panel empty-state' }, [
             createElement('h2', { textContent: 'Start exploring' }),
@@ -166,7 +141,10 @@ function detailPanel(country, images, isLoadingImages, onToggleFavorite, onViewI
         ]),
         createElement('div', { className: 'gallery-header' }, [
             createElement('h3', { textContent: 'Travel inspiration' }),
-            createElement('span', { textContent: 'Unsplash-powered images' }),
+            createElement('span', {
+                className: imageSource === 'unsplash' ? 'image-status is-live' : 'image-status',
+                textContent: imageMessage,
+            }),
         ]),
         gallery,
     ]);
@@ -328,6 +306,9 @@ function App() {
         currentPage: 1,
         loading: false,
         loadingImages: false,
+        imageMessage: '',
+        imageRequestId: 0,
+        imageSource: 'fallback',
         selectedImage: null,
         unsplashAccessKey: getUnsplashAccessKey(),
         message: 'Loading countries...',
@@ -370,24 +351,39 @@ function App() {
     }
 
     async function loadImages(country) {
-        setState({ selectedCountry: country, destinationImages: [], loadingImages: true, selectedImage: null });
+        const imageRequestId = state.imageRequestId + 1;
+
+        setState({
+            selectedCountry: country,
+            destinationImages: [],
+            imageMessage: `Loading ${country.name} travel photos...`,
+            imageRequestId,
+            imageSource: 'loading',
+            loadingImages: true,
+            selectedImage: null,
+        });
 
         try {
-            const images = await getDestinationImages(country.name);
-            setState({ destinationImages: images, loadingImages: false });
-        }
-        catch {
-            setState({ destinationImages: [], loadingImages: false });
-        }
-    }
+            const result = await getDestinationImages(country, state.unsplashAccessKey);
 
-    function updateUnsplashAccessKey(accessKey) {
-        saveUnsplashAccessKey(accessKey);
-        const nextAccessKey = getUnsplashAccessKey();
-        setState({ unsplashAccessKey: nextAccessKey });
+            if (state.imageRequestId !== imageRequestId) return;
 
-        if (state.selectedCountry) {
-            loadImages(state.selectedCountry);
+            setState({
+                destinationImages: result.images,
+                imageMessage: result.message,
+                imageSource: result.source,
+                loadingImages: false,
+            });
+        }
+        catch (error) {
+            if (state.imageRequestId !== imageRequestId) return;
+
+            setState({
+                destinationImages: [],
+                imageMessage: error.message || 'Travel images are unavailable right now.',
+                imageSource: 'fallback',
+                loadingImages: false,
+            });
         }
     }
 
@@ -417,7 +413,6 @@ function App() {
                     createElement('span', { className: 'brand-mark', textContent: 'CT' }),
                     createElement('span', { textContent: 'Country & Travel Explorer' }),
                 ]),
-                unsplashKeyForm(state.unsplashAccessKey, updateUnsplashAccessKey),
             ]),
             createElement('div', { className: 'hero-content' }, [
                 createElement('h1', { textContent: 'Explore countries, cultures, and travel ideas.' }),
@@ -546,7 +541,7 @@ function App() {
                     }),
                 ]),
                 createElement('div', { className: 'detail-column' }, [
-                    detailPanel(state.selectedCountry, state.destinationImages, state.loadingImages, toggleFavorite, image => {
+                    detailPanel(state.selectedCountry, state.destinationImages, state.imageMessage, state.imageSource, state.loadingImages, toggleFavorite, image => {
                         setState({ selectedImage: image });
                     }),
                     favoritesPanel(state.favorites, loadImages, countryId => {
