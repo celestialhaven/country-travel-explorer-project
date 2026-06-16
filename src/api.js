@@ -1,4 +1,5 @@
 const COUNTRIES_DATA_URL = 'https://raw.githubusercontent.com/mledoze/countries/master/countries.json';
+const POPULATION_DATA_URL = 'https://raw.githubusercontent.com/samayo/country-json/master/src/country-by-population.json';
 const UNSPLASH_BASE = 'https://api.unsplash.com/search/photos';
 const fallbackImageUrls = [
     {
@@ -15,19 +16,41 @@ const fallbackImageUrls = [
     },
 ];
 let countriesCache = null;
+let populationCache = null;
 
-function normalizeCountry(country) {
+function normalizeName(value) {
+    return value.trim().toLowerCase();
+}
+
+async function getPopulationData() {
+    if (populationCache) return populationCache;
+
+    const response = await fetch(POPULATION_DATA_URL);
+
+    if (!response.ok) {
+        populationCache = new Map();
+        return populationCache;
+    }
+
+    const data = await response.json();
+    populationCache = new Map(data.map(item => [normalizeName(item.country), item.population]));
+    return populationCache;
+}
+
+function normalizeCountry(country, populationByName) {
     const currencyNames = country.currencies
         ? Object.values(country.currencies).map(currency => currency.name)
         : [];
     const countryName = country.name?.common || 'Unknown country';
+    const population = populationByName.get(normalizeName(countryName))
+        || populationByName.get(normalizeName(country.name?.official || ''));
 
     return {
         id: country.cca3,
         name: countryName,
         officialName: country.name?.official || countryName,
         capital: country.capital?.join(', ') || 'No official capital',
-        population: country.population,
+        population,
         area: country.area,
         region: country.region || 'Unknown',
         subregion: country.subregion || 'Unknown',
@@ -42,14 +65,17 @@ function normalizeCountry(country) {
 async function getCountriesData() {
     if (countriesCache) return countriesCache;
 
-    const response = await fetch(COUNTRIES_DATA_URL);
+    const [response, populationByName] = await Promise.all([
+        fetch(COUNTRIES_DATA_URL),
+        getPopulationData(),
+    ]);
 
     if (!response.ok) {
         throw new Error('Country data could not be loaded.');
     }
 
     const data = await response.json();
-    countriesCache = data.map(normalizeCountry).sort((a, b) => a.name.localeCompare(b.name));
+    countriesCache = data.map(country => normalizeCountry(country, populationByName)).sort((a, b) => a.name.localeCompare(b.name));
     return countriesCache;
 }
 
